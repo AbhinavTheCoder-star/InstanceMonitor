@@ -1,0 +1,61 @@
+name: Release Linux binaries
+
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test static musl executable
+        # Run Alpine inside Docker rather than making it the job container;
+        # JavaScript actions continue to run on the Ubuntu host on both CPUs.
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work alpine:3.22 sh -ec '
+            apk add --no-cache build-base pkgconf ncurses-dev ncurses-static python3 file
+            make clean
+            make LDFLAGS=-static check
+            file instmon | grep "statically linked"
+            strip instmon
+          '
+      - name: Package executable and notices
+        run: sh scripts/package.sh '${{ matrix.arch }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish tested release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/* install.sh \
+            --verify-tag --title "InstanceMonitor $RELEASE_TAG" \
+            --notes-file .github/release-notes.md

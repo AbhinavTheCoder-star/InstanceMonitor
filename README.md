@@ -21,7 +21,46 @@ charts, incremental collection and performance benchmarking remain on the roadma
 Socket inodes currently appear in the descriptor panel; they are not decoded into
 connections. See [instructions.md](instructions.md) for the full design.
 
-## Build
+## Install — no build required
+
+Linux x86-64 and ARM64 users can install the latest prebuilt release with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AbhinavTheCoder-star/InstanceMonitor/main/install.sh | sh
+instmon
+```
+
+The installer downloads the matching binary, verifies its SHA-256 checksum, and
+installs it to `/usr/local/bin`. It requests sudo only if that directory requires
+it. Requirements: curl, tar, sha256sum and standard Linux utilities; no compiler
+or ncurses shared libraries are needed. Interactive mode uses your system's
+terminal database (terminfo), normally present on desktop Linux.
+
+For a user-only installation:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AbhinavTheCoder-star/InstanceMonitor/main/install.sh | sh -s -- --prefix "$HOME/.local"
+```
+
+If `~/.local/bin` is not already on PATH, the installer prints the command to add
+it. Put that command in your shell's startup file to keep it across sessions.
+
+Prefer a manual download? Open [Releases](https://github.com/AbhinavTheCoder-star/InstanceMonitor/releases/latest),
+download the archive for your CPU and its `.sha256` file into the same directory,
+verify with `sha256sum -c <archive>.sha256`, extract it and run `./instmon`.
+The checksum detects corrupt or mismatched downloads; it is not a separate signature.
+
+Rerun the installer to upgrade. Pin a version by passing `sh -s -- --version v0.1.0`
+instead of `sh`. To uninstall the default installation:
+
+```sh
+sudo rm /usr/local/bin/instmon
+```
+
+For a user-only installation, remove `~/.local/bin/instmon` instead. macOS,
+Windows, 32-bit systems and other CPU architectures are not supported.
+
+## Build from source (developers)
 
 Requires Linux with `/proc` mounted, Make, pkg-config, GCC or Clang, and ncursesw
 headers/libraries. Python 3 is needed only for integration tests.
@@ -39,14 +78,14 @@ For Clang, use `make clean && make CC=clang`.
 ## Usage
 
 ```sh
-./instmon                         # Interactive monitor
-./instmon list                    # One plain snapshot
-./instmon inspect 1234            # Detailed inspection of PID 1234
-./instmon list --sort ram
-./instmon --user "$USER" --interval 0.5
-./instmon list --filter firefox --json
-./instmon inspect 1234 --json > diagnostics.json
-./instmon --help
+instmon                           # Interactive monitor
+instmon list                    # One plain snapshot
+instmon inspect 1234            # Detailed inspection of PID 1234
+instmon list --sort ram
+instmon --user "$USER" --interval 0.5
+instmon list --filter firefox --json
+instmon inspect 1234 --json > diagnostics.json
+instmon --help
 ```
 
 Redirecting the default command produces one plain snapshot. `--json` always
@@ -122,3 +161,19 @@ interactive control/rendering in `src/ui.c`. Shared types and ownership contract
 are in `include/instmon.h`. `main.c` selects the execution mode and owns one-shot
 snapshot cleanup. The implementation uses ncursesw and a small streaming JSON
 writer; it does not launch shell commands to collect process data.
+
+## Publishing releases
+
+Maintainers publish a new version by updating the version in `src/cli.c`, then
+pushing a matching tag such as `v0.1.0`. The release workflow builds native x86-64
+and ARM64 static binaries in Alpine Linux, runs the core/CLI/JSON/terminal tests,
+and uploads archives, SHA-256 checksums and the installer to GitHub Releases only
+when both architecture builds succeed. Build artifacts contain third-party notices.
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Do not reuse published version tags. Run `python3 tests/test_install.py` to check
+the installer without network access or writing into system directories.

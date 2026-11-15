@@ -19,6 +19,7 @@ build/test_core: tests/test_core.c src/proc.c src/metrics.c include/instmon.h
 check: instmon build/test_core
 	./build/test_core
 	python3 tests/integration.py
+	python3 tests/test_install.py
 sanitize:
 	$(MAKE) clean
 	$(MAKE) CFLAGS='-O1 -g -std=c17 -Wall -Wextra -Wpedantic -fsanitize=address,undefined -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address,undefined' check
