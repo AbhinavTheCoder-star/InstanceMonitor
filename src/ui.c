@@ -1,4 +1,5 @@
 #include "instmon.h"
+#include "sysmon.h"
 #include <curses.h>
 #include <inttypes.h>
 #include <signal.h>
@@ -39,6 +40,9 @@ static void document(const char *text, size_t skip)
 int ui_run(const Options *initial)
 {
     Options options = *initial;
+    Sysmon system = {.pipe_fd = -1};
+    bool sysmon = options.sysmon, system_ready = false;
+    size_t system_scroll = 0;
     Snapshot current = {0}, previous = {0};
     Process selected = {0};
     Details details = {0};
@@ -66,15 +70,21 @@ int ui_run(const Options *initial)
             if (deadline == 0) deadline = now;
             do { deadline += options.interval; } while (deadline <= monotonic_seconds());
         }
+        if (sysmon) {
+            if (!system_ready) { sysmon_init(&system, ""); system_ready = true; }
+            sysmon_refresh(&system, now);
+        }
+        if (system_ready) sysmon_poll(&system, now);
         Snapshot view = current;
         /* Allocate only a view array; all strings are inline and safe to copy. */
         view.items = NULL;
-        if (current.count) {
+        if (!sysmon && current.count) {
             view.items = malloc(current.count * sizeof *view.items);
             if (!view.items) { result = 1; break; }
             memcpy(view.items, current.items, current.count * sizeof *view.items);
         }
-        snapshot_query(&view, &options);
+        if (sysmon) view.count = 0;
+        else snapshot_query(&view, &options);
         if (view.count && index >= view.count) index = view.count - 1;
         if (!inspecting && selected.pid) {
             for (size_t i = 0; i < view.count; ++i)
@@ -85,10 +95,15 @@ int ui_run(const Options *initial)
         erase();
         char buffer[TEXT_CAP * 4];
         snprintf(buffer, sizeof buffer, "InstanceMonitor | %zu processes | RAM %.0f / %.0f MiB available | %ld CPUs | refresh %.3fs",
-                 view.count, (double)current.memory_available / 1048576, (double)current.memory_total / 1048576, current.cpus, current.duration);
+                 sysmon ? current.count : view.count, (double)current.memory_available / 1048576, (double)current.memory_total / 1048576, current.cpus, current.duration);
         line(0, buffer);
         if (help) {
-            document("Arrows / j,k: move or scroll\nEnter: inspect process\nTab: next diagnostic panel\nEscape: return to process list\n/: search by name or command; Enter finishes; Escape clears\ns: cycle RAM, CPU, name, PID sort\nr: reverse sort\nq: quit (outside search)\n\nRAM means RSS; shared pages can count in multiple processes.\nCPU: 100% is one logical CPU; first sample warms up.\nDetails refresh every five seconds. Permission restrictions are shown.\nNo application state is modified.", 0);
+            document("Arrows / j,k: move or scroll\nEnter: inspect process\nTab: next diagnostic panel\nEscape: return to process list\n/: search by name or command; Enter finishes; Escape clears\ns: open Sysmon; m: return to main monitor\nShift+S: cycle RAM, CPU, name, PID sort\nr: reverse sort\nq: quit (outside search)\n\nRAM means RSS; shared pages can count in multiple processes.\nCPU: 100% is one logical CPU; first sample warms up.\nDetails refresh every five seconds. Permission restrictions are shown.\nNo application state is modified.", 0);
+        } else if (sysmon) {
+            snprintf(buffer, sizeof buffer, "System Monitor (Sysmon) | diagnostic age %.1fs | j/k: scroll", now - system.refreshed_at);
+            line(2, buffer);
+            sysmon_format(&system, &current, buffer, sizeof buffer);
+            document(buffer, system_scroll);
         } else if (inspecting) {
             if (live) {
                 selected = *live;
@@ -128,7 +143,7 @@ int ui_run(const Options *initial)
             }
             if (!view.count) line(4, "No matching processes.");
         }
-        line(LINES - 1, "j/k: move  Enter: inspect  Tab: panel  Esc: back  /: search  s: sort  r: reverse  ?: help  q: quit");
+        line(LINES - 1, "j/k: move  Enter: inspect  Tab: panel  Esc: back  /: search  s: Sysmon  m: main  S: sort  r: reverse  ?: help  q: quit");
         refresh();
         int key = getch();
         if (searching) {
@@ -140,21 +155,26 @@ int ui_run(const Options *initial)
             index = 0; selected.pid = 0;
         } else if (key == 'q') stopping = 1;
         else if (key == '?') help = !help;
-        else if (key == 27) { inspecting = false; help = false; scroll = 0; }
-        else if (key == '/' && !inspecting) searching = true;
-        else if (key == 's') options.sort = (SortKey)((options.sort + 1) % 4);
+        else if (key == 27) { sysmon = false; inspecting = false; help = false; scroll = 0; }
+        else if (key == 's') { sysmon = true; help = false; }
+        else if (key == 'm') { sysmon = false; inspecting = false; help = false; scroll = 0; }
+        else if (key == '/' && !inspecting && !sysmon) searching = true;
+        else if (key == 'S') options.sort = (SortKey)((options.sort + 1) % 4);
         else if (key == 'r') options.reverse = !options.reverse;
-        else if (key == '\t' && inspecting) { panel = (panel + 1) % 5; scroll = 0; }
-        else if ((key == '\n' || key == KEY_ENTER) && view.count && !inspecting) { inspecting = true; details_at = 0; scroll = 0; }
+        else if (key == '\t' && inspecting && !sysmon) { panel = (panel + 1) % 5; scroll = 0; }
+        else if ((key == '\n' || key == KEY_ENTER) && view.count && !inspecting && !sysmon) { inspecting = true; details_at = 0; scroll = 0; }
         else if (key == KEY_DOWN || key == 'j') {
-            if (inspecting) { if (scroll < 4096) ++scroll; }
+            if (sysmon) { if (system_scroll < 4096) ++system_scroll; }
+            else if (inspecting) { if (scroll < 4096) ++scroll; }
             else if (index + 1 < view.count) { ++index; selected = view.items[index]; }
         } else if (key == KEY_UP || key == 'k') {
-            if (inspecting) { if (scroll) --scroll; }
+            if (sysmon) { if (system_scroll) --system_scroll; }
+            else if (inspecting) { if (scroll) --scroll; }
             else if (index) { --index; selected = view.items[index]; }
         }
         free(view.items);
     }
+    sysmon_destroy(&system);
     endwin();
     sigaction(SIGINT, &old_int, NULL); sigaction(SIGTERM, &old_term, NULL);
     snapshot_free(&current); snapshot_free(&previous);

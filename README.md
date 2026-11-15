@@ -6,8 +6,9 @@ by its PID and start time. The monitor is read-only and runs without root.
 
 ## Status
 
-Version 0.1 is an initial working implementation. It provides:
+Version 0.2.0 includes a lightweight System Monitor alongside the process monitor. It provides:
 
+- System information and diagnostics in Sysmon (`instmon --sysmon`).
 - Live process table with owner, state, CPU, RAM, memory percentage and threads.
 - Name/command search, owner filtering, sorting and stable process selection.
 - Selectable overview, status, memory, open-descriptor and resource-limit panels.
@@ -50,7 +51,7 @@ download the archive for your CPU and its `.sha256` file into the same directory
 verify with `sha256sum -c <archive>.sha256`, extract it and run `./instmon`.
 The checksum detects corrupt or mismatched downloads; it is not a separate signature.
 
-Rerun the installer to upgrade. Pin a version by passing `sh -s -- --version v0.1.0`
+Rerun the installer to upgrade. Pin a version by passing `sh -s -- --version v0.2.0`
 instead of `sh`. To uninstall the default installation:
 
 ```sh
@@ -78,7 +79,8 @@ For Clang, use `make clean && make CC=clang`.
 ## Usage
 
 ```sh
-instmon                           # Interactive monitor
+instmon                         # Existing process monitor
+instmon --sysmon                # System information and diagnostics
 instmon list                    # One plain snapshot
 instmon inspect 1234            # Detailed inspection of PID 1234
 instmon list --sort ram
@@ -100,7 +102,9 @@ selects noninteractive output. `--interval` is interactive only, from 0.25 to
 | Tab | Next diagnostic panel |
 | Escape | Return to process table |
 | / | Search names and commands; Enter finishes, Escape clears |
-| s | Cycle RAM, CPU, name and PID sorting |
+| s | Open System Monitor (Sysmon) |
+| m | Return to the main process monitor |
+| Shift+S | Cycle RAM, CPU, name and PID sorting |
 | r | Reverse sorting |
 | ? | Toggle help |
 | q | Quit, except while typing a search |
@@ -108,6 +112,39 @@ selects noninteractive output. `--interval` is interactive only, from 0.25 to
 A selected process that exits remains identifiable in the detail view. Cached
 information is labeled as last observed; a new process with a reused PID is never
 silently substituted.
+
+## System Monitor (Sysmon)
+
+Run `instmon --sysmon`, or press `s` from the process monitor. Press `m` to return
+to the main process table. Filters, selection and sort order are retained. Sort
+cycling uses **Shift+S**; other existing keys retain their behavior. While typing
+in a search, `s` and `m` remain literal search characters. Escape also returns to
+the process table; arrows or j/k scroll the Sysmon document on smaller terminals.
+
+Sysmon displays OS, kernel, hostname, uptime, CPU model, online physical-core and
+thread counts, GPU vendor/device IDs, total RAM and visible physical block-device
+capacities. GPU marketing names are not guessed and no PCI database is downloaded.
+Missing or restricted hardware data is labeled unavailable.
+
+Diagnostics include maximum readable CPU temperature from recognized CPU sensors,
+RAM used (`MemTotal - MemAvailable`), root-filesystem disk usage, system load
+(1/5/15-minute averages), and failed **system-scope** systemd services. Disk usage
+covers `/`, not every mount; physical capacities are shown individually and are
+not summed across RAID or other storage layers. Disk used excludes free blocks;
+available space can be smaller because of filesystem reservations. Load averages
+are queue lengths, not CPU percentages.
+
+Hardware information is cached for the session. Temperature, disk and load refresh
+every five seconds while Sysmon is visible; RAM and uptime reuse the process
+snapshot. CPU topology reflects online CPUs when the view is first opened.
+Failed-service checks are cached for 30 seconds and use an optional, read-only
+`systemctl` subprocess, without a shell. Queries are asynchronous with a two-second
+timeout and bounded output. Missing systemd/systemctl or inaccessible service
+managers produce an unavailable message, not a false “no failures” result.
+No new libraries, daemon or background threads are required.
+
+`--sysmon` requires an interactive terminal and cannot be combined with `list`,
+`inspect` or `--json`; those output modes continue to describe processes.
 
 ## Reading the measurements
 
@@ -128,7 +165,7 @@ are restricted by permissions. An inaccessible or rapidly exiting process may be
 omitted if its identity cannot be established safely. Collection spans a time
 window rather than an atomic snapshot. Slow collection can delay keyboard input;
 refresh duration is displayed. Non-ASCII process text is replaced with `?` in this
-initial version to keep terminal and JSON handling predictable.
+implementation to keep terminal and JSON handling predictable.
 
 Commands and paths may contain private information. Export occurs only when you
 request it; environment variables and application log contents are not read.
@@ -149,7 +186,7 @@ requested PID, `2` invalid arguments. Diagnostics go to stderr; results go to st
 ## Development and checks
 
 ```sh
-make check       # Parser, metrics, CLI, JSON and pseudo-terminal tests
+make check       # Core, CLI, JSON, both TUI views, installer and Sysmon tests
 make sanitize    # Rebuild and run with AddressSanitizer + UndefinedBehaviorSanitizer
 make clean
 make             # Return to the normal build
@@ -160,19 +197,21 @@ Collection lives in `src/proc.c`, metric calculations and queries in
 interactive control/rendering in `src/ui.c`. Shared types and ownership contracts
 are in `include/instmon.h`. `main.c` selects the execution mode and owns one-shot
 snapshot cleanup. The implementation uses ncursesw and a small streaming JSON
-writer; it does not launch shell commands to collect process data.
+writer; process data comes directly from Linux interfaces. Sysmon alone optionally queries
+`systemctl` without a shell. Its collector and bounded child lifecycle live in
+`src/sysmon.c`, with contracts in `include/sysmon.h`.
 
 ## Publishing releases
 
 Maintainers publish a new version by updating the version in `src/cli.c`, then
-pushing a matching tag such as `v0.1.0`. The release workflow builds native x86-64
+pushing a matching tag such as `v0.2.0`. The release workflow builds native x86-64
 and ARM64 static binaries in Alpine Linux, runs the core/CLI/JSON/terminal tests,
 and uploads archives, SHA-256 checksums and the installer to GitHub Releases only
 when both architecture builds succeed. Build artifacts contain third-party notices.
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Do not reuse published version tags. Run `python3 tests/test_install.py` to check

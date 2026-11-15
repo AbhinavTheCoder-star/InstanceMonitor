@@ -28,18 +28,19 @@ int options_parse(int argc, char **argv, Options *o)
                  "Usage: instmon [list | inspect PID] [options]\n"
                  "  --sort ram|cpu|name|pid  --reverse  --filter TEXT\n"
                  "  --user NAME|UID  --json  --interval SECONDS (interactive)\n"
-                 "  --help  --version\n"
+                 "  --sysmon (interactive)  --help  --version\n"
                  "Keys: arrows/j/k select, Enter inspect, Tab panel, Esc back,\n"
-                 "      / search, s sort, r reverse, ? help, q quit");
+                 "      / search, s Sysmon, m main, S sort, r reverse, ? help, q quit");
             return 1;
         }
-        if (!strcmp(arg, "--version")) { puts("instmon 0.1.0"); return 1; }
+        if (!strcmp(arg, "--version")) { puts("instmon 0.2.0"); return 1; }
         if (!strcmp(arg, "list") && !o->list && !o->inspect) { o->list = true; continue; }
         if (!strcmp(arg, "inspect") && !o->list && !o->inspect && i + 1 < argc) {
             unsigned long pid;
             if (!number(argv[++i], &pid) || !pid || pid > INT_MAX) goto invalid;
             o->inspect = true; o->pid = (pid_t)pid; continue;
         }
+        if (!strcmp(arg, "--sysmon")) { o->sysmon = true; continue; }
         if (!strcmp(arg, "--json")) { o->json = true; continue; }
         if (!strcmp(arg, "--reverse")) { o->reverse = true; continue; }
         if (i + 1 >= argc) goto invalid;
@@ -71,6 +72,10 @@ int options_parse(int argc, char **argv, Options *o)
         }
 invalid:
         fprintf(stderr, "Invalid argument near '%s'; use --help\n", arg);
+        return -1;
+    }
+    if (o->sysmon && (o->list || o->inspect || o->json)) {
+        fprintf(stderr, "--sysmon requires the interactive monitor\n");
         return -1;
     }
     if (o->inspect && (o->filter[0] || o->user_set)) {

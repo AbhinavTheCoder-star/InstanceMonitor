@@ -40,7 +40,7 @@ typedef struct {
 
 typedef enum { SORT_RAM, SORT_CPU, SORT_NAME, SORT_PID } SortKey;
 typedef struct {
-    bool list, inspect, json, reverse, interval_set, user_set;
+    bool list, inspect, json, reverse, interval_set, user_set, sysmon;
     pid_t pid;
     uid_t uid;
     double interval;

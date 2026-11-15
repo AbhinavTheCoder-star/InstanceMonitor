@@ -12,6 +12,10 @@ int main(int argc, char **argv)
 
     bool interactive = !options.list && !options.inspect && !options.json &&
                        isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+    if (options.sysmon && !interactive) {
+        fprintf(stderr, "--sysmon requires an interactive terminal\n");
+        return 2;
+    }
     if (options.interval_set && !interactive) {
         fprintf(stderr, "--interval requires the interactive monitor\n");
         return 2;

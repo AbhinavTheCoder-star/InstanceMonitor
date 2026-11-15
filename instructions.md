@@ -31,7 +31,7 @@ Support search by name or command, filtering by owner or PID, sorting by RAM/CPU
 
 ### Selecting an instance
 
-Arrow keys or `j`/`k` move the selection; Enter opens details; Escape returns; `q` quits; `/` searches; `s` cycles sort columns; `r` reverses sort; `t` toggles the tree; `?` shows help. In details, Tab cycles diagnostic panels. Show these controls in the footer.
+Arrow keys or `j`/`k` move the selection; Enter opens details; Escape returns; `q` quits; `/` searches; `s` opens Sysmon; `m` returns to the process monitor; `Shift+S` cycles sort columns; `r` reverses sort; `t` toggles the tree; `?` shows help. In details, Tab cycles diagnostic panels. Show these controls in the footer.
 
 Preserve selection by process identity across refreshes, not table row number. If the selected process exits, show “Process exited” and its last observed values with their timestamp; do not silently select a replacement PID.
 
@@ -59,7 +59,7 @@ Planned interface:
 - `instmon`: interactive monitor on a terminal; one plain snapshot when output is redirected.
 - `instmon list`: one process snapshot.
 - `instmon inspect <pid>`: one detailed process snapshot, recording its identity before collection.
-- Shared options: `--interval <seconds>`, `--sort <field>`, `--reverse`, `--user <name-or-uid>`, `--filter <text>`, `--json`, `--help`, and `--version`, where applicable.
+- Shared options: `--sysmon` (interactive only), `--interval <seconds>`, `--sort <field>`, `--reverse`, `--user <name-or-uid>`, `--filter <text>`, `--json`, `--help`, and `--version`, where applicable.
 - `--interval` controls interactive refresh; default 1 second, minimum 0.25 seconds. Reject it for commands that do not refresh.
 - JSON includes a schema version, timestamps, units, process identity, nullable values, and field availability. JSON contains no terminal control sequences.
 - Exit codes: 0 for a successful collection (including explicitly reported partial field availability), 1 for fatal runtime failure, and 2 for invalid arguments. An absent requested PID is a runtime failure. Help and version exit successfully.
@@ -94,6 +94,7 @@ The controller owns refresh scheduling, current selection, history, and lifecycl
 | `src/query.c` | Filtering, sorting, parent/child indexing |
 | `src/platform/platform.h` | Backend contract and capability flags |
 | `src/platform/linux/` | Process discovery, parsing, system and detail collectors |
+| `src/sysmon.c`, `include/sysmon.h` | Cached system information, diagnostics, asynchronous optional systemctl query |
 | `src/ui/` | Overview, detail panels, help, input and layout |
 | `src/output/` | Plain tables and versioned JSON |
 | `src/util/` | Checked parsing, strings, time, error handling |
@@ -259,3 +260,23 @@ Activity summaries must be factual: for example, “Sleeping; low CPU; storage w
 ## 8. Future extensions
 
 After the Linux release, evaluate logical application grouping with explicit membership rules, alert thresholds, longer opt-in history, cgroup/container views, and macOS/Windows backends. Keep capability differences visible. Trace collection, stack sampling and process-control commands each require a separate design because they change privileges, overhead, and interaction with the monitored application.
+
+## 9. Implemented Sysmon extension (v0.2.0)
+
+The system view shares `src/ui.c` rendering, document scrolling, footer and event
+loop. `instmon` retains its process-table default; `--sysmon` starts in Sysmon.
+`s` opens Sysmon, `m` returns to the main table, and Shift+S cycles sort order
+(the user-approved resolution of the original `s` key conflict).
+
+`src/sysmon.c` caches hardware data once, refreshes sensor/load/root-filesystem
+information every five seconds only when visible, and reuses existing RAM/uptime
+snapshots. Sources are os-release, uname, procfs, sysfs and statvfs. GPU reporting
+uses readable DRM vendor/device IDs; storage lists visible physical devices and
+root-filesystem diagnostics. Unknown hardware remains unavailable.
+
+Failed system-scope services are the one optional external query: exec systemctl
+without a shell, poll a nonblocking pipe in the existing UI loop, cap output,
+kill after two seconds, reap on completion/exit, and cache for 30 seconds.
+Process collection itself continues to use no subprocesses. No extra libraries
+or threads are added. Collector fixtures and pseudo-terminal navigation tests
+cover the new view, absence of hardware/systemd, query failures and cleanup.

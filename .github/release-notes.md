@@ -1,24 +1,21 @@
-Run InstanceMonitor on Linux without compiling anything.
+System Monitor arrives in InstanceMonitor v0.2.0.
+
+- Start with `instmon --sysmon`, press `s` for Sysmon, or `m` for the main monitor.
+- Inspect OS, kernel, hostname, uptime, CPU/topology, GPU IDs, RAM and storage.
+- View CPU temperature, RAM/root-filesystem usage, load and failed system services.
+- Hardware and diagnostics are cached; optional systemctl queries are asynchronous,
+  bounded and timed out. Missing hardware or systemd is reported gracefully.
+- Sort cycling now uses **Shift+S**; other shortcuts and process features remain.
+
+Install or upgrade without compiling:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/AbhinavTheCoder-star/InstanceMonitor/main/install.sh | sh
-instmon
+instmon --sysmon
 ```
 
-The installer detects x86-64 or ARM64, verifies the archive's SHA-256 checksum,
-and installs to `/usr/local/bin` (using sudo if needed). For a user-only install,
-pass `sh -s -- --prefix "$HOME/.local"` instead of `sh`; ensure `~/.local/bin` is on PATH.
-
-Alternatively, download the archive matching your CPU, verify its accompanying
-`.sha256` file with `sha256sum -c`, extract it, and run `./instmon`.
-
-Binaries statically link musl and ncurses; no compiler or ncurses shared library
-is required. Interactive mode uses the system's terminal database (`terminfo`),
-which is normally already installed on desktop Linux. Linux `/proc` is required.
-macOS, Windows, 32-bit systems, and other CPU architectures are not supported.
-
-To upgrade, rerun the installer. To uninstall a default installation, run
-`sudo rm /usr/local/bin/instmon`.
-
-This is the initial implementation: process trees, per-thread CPU metrics,
-decoded connections and history charts remain planned. See the README for details.
+Includes static Linux x86-64 and ARM64 binaries with SHA-256 checksums. The installer
+uses `/usr/local/bin` and sudo if needed; pass `sh -s -- --prefix "$HOME/.local"`
+for a user-only installation. Linux `/proc` and a terminal database are required;
+`systemctl` is optional. Sysmon is interactive only. See README for measurement
+scope and unavailable-data behavior.
