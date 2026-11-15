@@ -1,65 +1,124 @@
-InstanceMonitor
-A C-based CLI for monitoring running processes, tracking RAM and CPU usage, and exploring application diagnostics from your terminal.
-Overview
-InstanceMonitor aims to make it easier to understand what is running on your laptop and how those processes use system resources. Browse running instances, compare resource usage, and select a process to inspect its activity and diagnostics.
+# InstanceMonitor
 
-An instance refers to an individual operating-system process. Multiple processes running the same application appear separately.
-Project status
-Currently in the planning stage. The features below describe the intended application and are not yet implemented.
+A C17 terminal tool for monitoring Linux processes, tracking RAM and CPU usage,
+and inspecting application diagnostics. Each instance is one process, identified
+by its PID and start time. The monitor is read-only and runs without root.
 
-The initial release will target Linux.
-Planned features
-- Live process overview: View process IDs, names, owners, states, CPU usage, RAM usage, thread counts, and uptime.
-- Memory monitoring: Inspect resident RAM, virtual memory, swap, and additional memory details where available.
-- Process diagnostics: Select an instance to explore its command, executable path, working directory, resource limits, and recent activity.
-- CPU and thread inspection: Track CPU consumption and inspect individual threads.
-- I/O monitoring: View read/write counters and transfer rates.
-- Open files and connections: Inspect accessible file descriptors and associated network sockets.
-- Search, filtering, and sorting: Find processes by name or command and compare them by resource usage.
-- Process tree: Explore parent and child relationships.
-- Terminal interface: Navigate an interactive overview and diagnostic panels using the keyboard.
-- Plain-text and JSON output: Collect snapshots for scripts and further analysis.
-Planned usage
-The executable will be named instmon.
-# Open the interactive monitor
-instmon
+## Status
 
-# Print a process snapshot
-instmon list
+Version 0.1 is an initial working implementation. It provides:
 
-# Inspect a specific process
-instmon inspect <pid>
+- Live process table with owner, state, CPU, RAM, memory percentage and threads.
+- Name/command search, owner filtering, sorting and stable process selection.
+- Selectable overview, status, memory, open-descriptor and resource-limit panels.
+- Executable path, working directory, parent PID, age and storage-I/O counters.
+- On-demand proportional memory data when kernel support and permissions allow.
+- Plain-text snapshots and versioned JSON export.
+- Bounded reads, PID-reuse checks and explicit unavailable/permission messages.
 
-# Export a snapshot as JSON
-instmon list --json
-These commands describe the planned interface and are not available yet.
-Technology
-- Language: C17
-- Initial platform: Linux
-- Data collection: Linux procfs and POSIX/Linux APIs
-- Terminal interface: ncursesw
-- Build tools: Make and GCC or Clang
-The application will operate locally, with no background service or database required.
-Understanding the data
-RAM usage will primarily refer to resident set size (RSS). Shared memory may appear in multiple processes, so adding their RSS values does not represent unique physical memory usage.
+Process trees, per-thread CPU metrics, decoded network endpoints, resource-history
+charts, incremental collection and performance benchmarking remain on the roadmap.
+Socket inodes currently appear in the descriptor panel; they are not decoded into
+connections. See [instructions.md](instructions.md) for the full design.
 
-CPU usage will use 100% to represent one fully occupied logical CPU. Multithreaded processes may exceed 100%.
+## Build
 
-Process state, CPU activity, and I/O counters can describe observable behavior. They cannot explain an application's internal intent or determine which business operation it is performing.
+Requires Linux with `/proc` mounted, Make, pkg-config, GCC or Clang, and ncursesw
+headers/libraries. Python 3 is needed only for integration tests.
 
-Some diagnostics may be restricted by operating-system permissions. InstanceMonitor will identify unavailable fields explicitly.
-Development plan
-1. Establish the C project structure and build system.
-2. Implement process discovery and memory collection.
-3. Add CPU measurements, I/O rates, filtering, and sorting.
-4. Build the interactive process overview.
-5. Implement detailed diagnostic panels.
-6. Add file, connection, thread, and resource-limit inspection.
-7. Complete plain-text and JSON output.
-8. Validate correctness, failure handling, and resource usage.
-9. Document installation and prepare the first release.
-See [instructions.md](instructions.md) for the full architecture, implementation steps, and acceptance criteria.
-Scope
-The initial release will provide read-only monitoring of processes visible to the current user. Process termination, debugging attachment, syscall tracing, remote monitoring, and macOS or Windows support are outside the initial scope.
-Building and installation
-Build and installation instructions will be added when the initial implementation is ready.
+On Debian/Ubuntu, install `build-essential pkg-config libncurses-dev python3`.
+On Arch/CachyOS, install `base-devel pkgconf ncurses python`.
+
+```sh
+make
+./instmon
+```
+
+For Clang, use `make clean && make CC=clang`.
+
+## Usage
+
+```sh
+./instmon                         # Interactive monitor
+./instmon list                    # One plain snapshot
+./instmon inspect 1234            # Detailed inspection of PID 1234
+./instmon list --sort ram
+./instmon --user "$USER" --interval 0.5
+./instmon list --filter firefox --json
+./instmon inspect 1234 --json > diagnostics.json
+./instmon --help
+```
+
+Redirecting the default command produces one plain snapshot. `--json` always
+selects noninteractive output. `--interval` is interactive only, from 0.25 to
+3600 seconds. Default refresh is one second; details refresh every five seconds.
+`inspect` does not accept search or owner filters.
+
+| Key | Action |
+| --- | --- |
+| Arrows or j/k | Move selection; scroll within a diagnostic panel |
+| Enter | Inspect selected process |
+| Tab | Next diagnostic panel |
+| Escape | Return to process table |
+| / | Search names and commands; Enter finishes, Escape clears |
+| s | Cycle RAM, CPU, name and PID sorting |
+| r | Reverse sorting |
+| ? | Toggle help |
+| q | Quit, except while typing a search |
+
+A selected process that exits remains identifiable in the detail view. Cached
+information is labeled as last observed; a new process with a reused PID is never
+silently substituted.
+
+## Reading the measurements
+
+- **RAM** is RSS in MiB. Shared pages can count in several processes; summed RSS
+  is not unique physical memory consumption. RSS is approximate.
+- **RAM percentage** uses host physical RAM as its denominator, not a container limit.
+- **Virtual memory** describes address space and is separate from resident RAM.
+- **CPU** uses 100% for one logical CPU; multithreaded processes can exceed 100%.
+  First samples show warming up. One-shot commands do not collect a second sample,
+  so their CPU percentage is unavailable.
+- **I/O** means storage read/write counters, not network traffic. Rates are computed
+  internally between valid samples; the current views expose cumulative counters.
+- **State** uses Linux letters such as R (running), S (sleeping), D (uninterruptible
+  sleep), T (stopped), and Z (zombie). State does not reveal application intent.
+
+Only processes visible in the current PID namespace can be collected. Some fields
+are restricted by permissions. An inaccessible or rapidly exiting process may be
+omitted if its identity cannot be established safely. Collection spans a time
+window rather than an atomic snapshot. Slow collection can delay keyboard input;
+refresh duration is displayed. Non-ASCII process text is replaced with `?` in this
+initial version to keep terminal and JSON handling predictable.
+
+Commands and paths may contain private information. Export occurs only when you
+request it; environment variables and application log contents are not read.
+
+## JSON and exit codes
+
+Schema version 1 includes collection time, duration, units, host memory and process
+records. Memory counters are bytes, age is seconds, `sampled_at_unix` is Unix time,
+and start ticks identify a process lifetime within this boot. Missing CPU values
+are `null` with `cpu_status`; missing I/O counters are `null` with `io_status`.
+Detail text contains bracketed availability messages and truncation markers.
+`details.identity_valid=false` means detail fields were discarded after exit or
+identity change. Raw diagnostic text is kernel-dependent, not a stable sub-schema.
+
+Exit codes: `0` success (possibly partial fields), `1` runtime failure or missing
+requested PID, `2` invalid arguments. Diagnostics go to stderr; results go to stdout.
+
+## Development and checks
+
+```sh
+make check       # Parser, metrics, CLI, JSON and pseudo-terminal tests
+make sanitize    # Rebuild and run with AddressSanitizer + UndefinedBehaviorSanitizer
+make clean
+make             # Return to the normal build
+```
+
+Collection lives in `src/proc.c`, metric calculations and queries in
+`src/metrics.c`, argument parsing in `src/cli.c`, output in `src/output.c`, and
+interactive control/rendering in `src/ui.c`. Shared types and ownership contracts
+are in `include/instmon.h`. `main.c` selects the execution mode and owns one-shot
+snapshot cleanup. The implementation uses ncursesw and a small streaming JSON
+writer; it does not launch shell commands to collect process data.
