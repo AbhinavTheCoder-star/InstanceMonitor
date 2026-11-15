@@ -1,0 +1,25 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# C build outputs
+/build/
+/bin/
+*.o
+*.a
+*.so
+*.so.*
+*.out
+/instmon
+/main
+
+# Editor and runtime files
+*.swp
+*.swo
+*~
+*.log
+/core
+/core.*
