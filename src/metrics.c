@@ -1,5 +1,6 @@
 #include "instmon.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <strings.h>
 
@@ -53,7 +54,12 @@ void snapshot_query(Snapshot *s, const Options *o)
         Process *p = &s->items[i];
         if (o->inspect && p->pid != o->pid) continue;
         if (o->user_set && p->uid != o->uid) continue;
-        if (o->filter[0] && !strcasestr(p->name, o->filter) && !strcasestr(p->command, o->filter)) continue;
+        if (o->filter[0]) {
+            char pid[32];
+            snprintf(pid, sizeof pid, "%ld", (long)p->pid);
+            if (!strcasestr(p->name, o->filter) && !strcasestr(p->command, o->filter) &&
+                !strstr(pid, o->filter)) continue;
+        }
         s->items[kept++] = *p;
     }
     s->count = kept; sort_key = o->sort; reversed = o->reverse;

@@ -2,15 +2,17 @@
 
 A C17 terminal tool for monitoring Linux processes, tracking RAM and CPU usage,
 and inspecting application diagnostics. Each instance is one process, identified
-by its PID and start time. The monitor is read-only and runs without root.
+by its PID and start time. Monitoring runs without root; optional process
+termination requires explicit confirmation and follows normal OS permissions.
 
 ## Status
 
-Version 0.2.0 includes a lightweight System Monitor alongside the process monitor. It provides:
+Version 0.3.0 adds confirmed process termination to the existing home screen. It provides:
 
 - System information and diagnostics in Sysmon (`instmon --sysmon`).
 - Live process table with owner, state, CPU, RAM, memory percentage and threads.
-- Name/command search, owner filtering, sorting and stable process selection.
+- Name/command/PID search, owner filtering, sorting and stable process selection.
+- Confirmed, identity-checked SIGTERM requests from the home screen.
 - Selectable overview, status, memory, open-descriptor and resource-limit panels.
 - Executable path, working directory, parent PID, age and storage-I/O counters.
 - On-demand proportional memory data when kernel support and permissions allow.
@@ -51,7 +53,7 @@ download the archive for your CPU and its `.sha256` file into the same directory
 verify with `sha256sum -c <archive>.sha256`, extract it and run `./instmon`.
 The checksum detects corrupt or mismatched downloads; it is not a separate signature.
 
-Rerun the installer to upgrade. Pin a version by passing `sh -s -- --version v0.2.0`
+Rerun the installer to upgrade. Pin a version by passing `sh -s -- --version v0.3.0`
 instead of `sh`. To uninstall the default installation:
 
 ```sh
@@ -97,11 +99,13 @@ selects noninteractive output. `--interval` is interactive only, from 0.25 to
 
 | Key | Action |
 | --- | --- |
-| Arrows or j/k | Move selection; scroll within a diagnostic panel |
-| Enter | Inspect selected process |
+| Up/Down arrows | Select a process; scroll within diagnostics |
+| k | Request termination on the home screen; scroll up in diagnostics |
+| j | Move down or scroll down |
+| Enter | Inspect selection; confirm SIGTERM when prompted |
 | Tab | Next diagnostic panel |
-| Escape | Return to process table |
-| / | Search names and commands; Enter finishes, Escape clears |
+| Escape | Cancel confirmation, search or selection; return from diagnostics |
+| / | Search names, commands and PIDs; Enter finishes, Escape clears |
 | s | Open System Monitor (Sysmon) |
 | m | Return to the main process monitor |
 | Shift+S | Cycle RAM, CPU, name and PID sorting |
@@ -112,6 +116,34 @@ selects noninteractive output. `--interval` is interactive only, from 0.25 to
 A selected process that exits remains identifiable in the detail view. Cached
 information is labeled as last observed; a new process with a reused PID is never
 silently substituted.
+
+## Managing a process
+
+Use the arrow keys to highlight a process on the home screen. Press `k` to request
+termination. The confirmation shows its name and PID: **Enter sends SIGTERM**,
+while **Escape cancels**. No signal is sent just by selecting a row or pressing k.
+The prompt stays on the home screen and keeps its original target across refreshes;
+other navigation keys are ignored until you confirm or cancel. A terminal too small
+to show the prompt cancels the request.
+
+SIGTERM asks the application to exit gracefully. It may take time or be ignored;
+a success message means the signal was sent, not that the application exited.
+Instmon never escalates a selected process to SIGKILL, retries a failed request,
+or requests elevated privileges. Permission failures and exited/changed processes
+are reported on the home screen.
+
+Immediately before signaling, Instmon verifies the process start time and uses a
+Linux PID handle to avoid sending SIGTERM to a reused PID. Termination requires
+Linux 5.3+ with `pidfd_open` and `pidfd_send_signal` permitted by the environment.
+If these interfaces are unsupported or blocked, no signal is sent; monitoring
+continues normally. No fallback to signaling a numeric PID is used.
+
+Search with `/`, type a name or PID (case-insensitive literal substring matching),
+and press Enter to finish. Existing command-line searching also matches PIDs.
+Escape clears a search and deselects the row; Escape on the home screen deselects
+without changing the filter. Use arrows to select again. A selected process that
+leaves the list is not silently replaced by a neighboring row. The `k` key retains
+its upward-scroll behavior in diagnostics and Sysmon, and is literal text in search.
 
 ## System Monitor (Sysmon)
 
@@ -204,14 +236,14 @@ writer; process data comes directly from Linux interfaces. Sysmon alone optional
 ## Publishing releases
 
 Maintainers publish a new version by updating the version in `src/cli.c`, then
-pushing a matching tag such as `v0.2.0`. The release workflow builds native x86-64
+pushing a matching tag such as `v0.3.0`. The release workflow builds native x86-64
 and ARM64 static binaries in Alpine Linux, runs the core/CLI/JSON/terminal tests,
 and uploads archives, SHA-256 checksums and the installer to GitHub Releases only
 when both architecture builds succeed. Build artifacts contain third-party notices.
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Do not reuse published version tags. Run `python3 tests/test_install.py` to check

@@ -61,6 +61,13 @@ void snapshot_rates(Snapshot *current, const Snapshot *previous);
 void snapshot_query(Snapshot *snapshot, const Options *options);
 const Process *snapshot_find(const Snapshot *snapshot, pid_t pid, uint64_t start);
 void details_collect(const Process *process, Details *details);
+/* A successful request means SIGTERM was delivered, not that the process exited.
+ * A pidfd pins the target lifetime; no signal-by-numeric-PID fallback is used. */
+typedef enum {
+    TERM_SENT, TERM_EXITED, TERM_CHANGED, TERM_DENIED, TERM_UNSUPPORTED, TERM_ERROR, TERM_INVALID
+} TerminateResult;
+TerminateResult process_terminate(const Process *process);
+const char *termination_message(TerminateResult result);
 void output_snapshot(const Snapshot *snapshot, const Options *options);
 int ui_run(const Options *options);
 

@@ -5,6 +5,8 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <pwd.h>
+#include <signal.h>
+#include <sys/syscall.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -254,4 +256,48 @@ void details_collect(const Process *p, Details *d)
     }
     d->identity_valid = !read_stat(p->pid, &check, page_size) && check.start_ticks == p->start_ticks;
     /* Callers must discard all detail fields when identity_valid is false. */
+}
+
+/* Open the stable kernel handle BEFORE reading stat. If the PID was reused
+ * before open, the start-time comparison refuses it. If it exits after that
+ * comparison, the handle cannot be redirected to a replacement process. */
+TerminateResult process_terminate(const Process *process)
+{
+    if (process->pid <= 0 || !process->start_ticks) return TERM_INVALID;
+#if defined(SYS_pidfd_open) && defined(SYS_pidfd_send_signal)
+    int handle = (int)syscall(SYS_pidfd_open, process->pid, 0U);
+    if (handle < 0) {
+        if (errno == ESRCH || errno == ENOENT) return TERM_EXITED;
+        if (errno == EPERM || errno == EACCES) return TERM_DENIED;
+        return errno == ENOSYS ? TERM_UNSUPPORTED : TERM_ERROR;
+    }
+    Process current = {0};
+    TerminateResult result;
+    if (read_stat(process->pid, &current, sysconf(_SC_PAGESIZE))) {
+        result = errno == ENOENT || errno == ESRCH ? TERM_EXITED :
+                 errno == EPERM || errno == EACCES ? TERM_DENIED : TERM_ERROR;
+    } else if (current.start_ticks != process->start_ticks) result = TERM_CHANGED;
+    else if (current.state == 'Z' || current.state == 'X' || current.state == 'x') result = TERM_EXITED;
+    else if (syscall(SYS_pidfd_send_signal, handle, SIGTERM, NULL, 0U) == 0) result = TERM_SENT;
+    else if (errno == ESRCH) result = TERM_EXITED;
+    else if (errno == EPERM || errno == EACCES) result = TERM_DENIED;
+    else result = errno == ENOSYS ? TERM_UNSUPPORTED : TERM_ERROR;
+    close(handle);
+    return result;
+#else
+    return TERM_UNSUPPORTED;
+#endif
+}
+
+const char *termination_message(TerminateResult result)
+{
+    switch (result) {
+        case TERM_SENT: return "SIGTERM sent; exit is not guaranteed";
+        case TERM_EXITED: return "Process has already exited; no signal sent";
+        case TERM_CHANGED: return "Process identity changed; no signal sent";
+        case TERM_DENIED: return "Permission denied; no signal sent";
+        case TERM_UNSUPPORTED: return "PID handles unsupported; no signal sent";
+        case TERM_INVALID: return "No valid process selected; no signal sent";
+        default: return "Unable to verify or signal process; no signal sent";
+    }
 }

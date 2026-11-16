@@ -19,9 +19,14 @@ build/test_core: tests/test_core.c src/proc.c src/metrics.c include/instmon.h
 build/sysmon_probe: tests/sysmon_probe.c src/sysmon.c src/proc.c include/sysmon.h include/instmon.h
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) tests/sysmon_probe.c src/sysmon.c src/proc.c -o $@
-check: instmon build/test_core build/sysmon_probe
+build/test_process: tests/test_process.c src/proc.c include/instmon.h
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) tests/test_process.c src/proc.c -Wl,--wrap=syscall -o $@
+check: instmon build/test_core build/sysmon_probe build/test_process
 	./build/test_core
+	./build/test_process
 	python3 tests/integration.py
+	python3 tests/test_management.py
 	python3 tests/test_install.py
 	python3 tests/test_sysmon.py
 sanitize:

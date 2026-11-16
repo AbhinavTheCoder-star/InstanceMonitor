@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Add home-screen SIGTERM requests with name/PID confirmation and Escape cancellation.
+- Verify process identity and signal through Linux PID handles to prevent PID-reuse
+  races; report permission, exited-process and unavailable-kernel errors.
+- Keep selection stable through refresh/sort and never substitute a neighboring
+  process after the target exits. Escape deselects until explicit navigation.
+- Add PID substring search alongside existing name/command matching.
+- Use k for termination on the home screen; retain k scrolling in diagnostic views.
+- Add child-process, injected-error and terminal tests for management and cancellation.
+
 ## 0.2.0
 
 - Add a System Monitor view with OS, kernel, hostname, uptime, CPU topology,

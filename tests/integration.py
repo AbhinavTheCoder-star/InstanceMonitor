@@ -83,6 +83,7 @@ def terminal_session(arguments, starts_in_sysmon):
         search = send(b'sm')
         assert b'System Monitor (Sysmon)' not in search
         send(b'\x1b')
+        send(b'\x1bOB')  # Down selects again after Escape cleared selection.
         assert b'Overview' in send(b'\n')
         assert b'Status / threads' in send(b'\t')
         # Tab panel cycling, detail navigation and Sysmon do not break selection.

@@ -42,6 +42,11 @@ int main(void)
     stat_parsing(); rates_and_identity();
     char hostile[] = "hello\033[31m\n";
     sanitize(hostile); assert(!strchr(hostile, '\033') && !strchr(hostile, '\n'));
+    Process items[] = {{.pid = 12345, .name = "worker"}, {.pid = 77, .name = "other"}};
+    Snapshot filtered = {.items = items, .count = 2};
+    Options options = {.filter = "234"};
+    snapshot_query(&filtered, &options);
+    assert(filtered.count == 1 && filtered.items[0].pid == 12345);
     puts("Core tests passed");
     return 0;
 }

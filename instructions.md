@@ -4,7 +4,7 @@
 
 **GitHub repository description:** A C-based CLI for monitoring running processes, tracking RAM and CPU usage, and exploring detailed application diagnostics in an interactive terminal.
 
-Build a local, read-only process monitor named `instmon`. Users can see running instances, understand their observable activity, compare resource use, and select a process for deeper inspection.
+Build a local process monitor named `instmon`. Users can see running instances, understand their observable activity, compare resource use, and select a process for deeper inspection.
 
 This document is the implementation plan. No application code is part of this planning change.
 
@@ -15,7 +15,7 @@ This document is the implementation plan. No application code is part of this pl
 - Enumerate every process visible to the current user through the current PID namespace. Restricted details are marked unavailable; the tool cannot guarantee access to every host process.
 - Show processes by default. A process tree shows parent/child relationships; it does not claim to identify every logical application or include detached children automatically.
 - “What it is doing” means observed process state, CPU activity, I/O changes, threads, command, and accessible resources. Determining application intent, individual functions, or business operations requires application instrumentation or tracing and is outside the first release.
-- Keep the initial tool read-only. Process termination, debugging attachment, syscall tracing, container management, and remote monitoring are future extensions.
+- Monitoring is read-only; v0.3.0 adds explicit, confirmed SIGTERM on the home screen. Debugging attachment, syscall tracing, container management, and remote monitoring remain future extensions.
 
 ## 2. User experience
 
@@ -31,7 +31,7 @@ Support search by name or command, filtering by owner or PID, sorting by RAM/CPU
 
 ### Selecting an instance
 
-Arrow keys or `j`/`k` move the selection; Enter opens details; Escape returns; `q` quits; `/` searches; `s` opens Sysmon; `m` returns to the process monitor; `Shift+S` cycles sort columns; `r` reverses sort; `t` toggles the tree; `?` shows help. In details, Tab cycles diagnostic panels. Show these controls in the footer.
+Arrow keys move the selection (`j` also moves down); `k` requests confirmed SIGTERM on the home screen and scrolls up in diagnostics; Enter opens details; Escape returns; `q` quits; `/` searches names, commands or PIDs; `s` opens Sysmon; `m` returns to the process monitor; `Shift+S` cycles sort columns; `r` reverses sort; `t` toggles the tree; `?` shows help. In details, Tab cycles diagnostic panels. Show these controls in the footer.
 
 Preserve selection by process identity across refreshes, not table row number. If the selected process exits, show “Process exited” and its last observed values with their timestamp; do not silently select a replacement PID.
 
@@ -280,3 +280,23 @@ kill after two seconds, reap on completion/exit, and cache for 30 seconds.
 Process collection itself continues to use no subprocesses. No extra libraries
 or threads are added. Collector fixtures and pseudo-terminal navigation tests
 cover the new view, absence of hardware/systemd, query failures and cleanup.
+
+## 10. Implemented process management (v0.3.0)
+
+Home-screen k captures the selected process identity in a confirmation state inside
+`src/ui.c`; Enter confirms and Escape cancels. No new view, library or event loop is
+introduced. Refreshes continue, but cannot change the pending target. Escape also
+cancels search or clears selection; missing selected identities never fall back to
+neighboring rows. `src/metrics.c` applies the same PID/name/command search to CLI and TUI.
+
+`process_terminate` in `src/proc.c` opens a pidfd, re-reads start ticks, refuses
+changed identities and exited processes, then sends SIGTERM through that same
+handle. It closes the handle on every path. Unsupported/blocked pidfd operations
+fail without a numeric-PID fallback. No escalation, retry, automatic termination,
+elevation or process-group signaling is implemented. A successful signal does not
+promise application exit. Sysmon's existing private query-child cleanup is unchanged.
+
+Tests exercise disposable child processes, injected syscall errors, mismatched
+identities, PID search, stable selection, cancellation, target exit during a prompt,
+and an ignored SIGTERM. The existing release matrix runs these alongside all
+monitoring and Sysmon regression tests on Linux x86-64 and ARM64.

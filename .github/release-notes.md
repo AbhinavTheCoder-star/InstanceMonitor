@@ -1,21 +1,20 @@
-System Monitor arrives in InstanceMonitor v0.2.0.
+InstanceMonitor v0.3.0 adds simple process management to the existing home screen.
 
-- Start with `instmon --sysmon`, press `s` for Sysmon, or `m` for the main monitor.
-- Inspect OS, kernel, hostname, uptime, CPU/topology, GPU IDs, RAM and storage.
-- View CPU temperature, RAM/root-filesystem usage, load and failed system services.
-- Hardware and diagnostics are cached; optional systemctl queries are asynchronous,
-  bounded and timed out. Missing hardware or systemd is reported gracefully.
-- Sort cycling now uses **Shift+S**; other shortcuts and process features remain.
+- Select with Up/Down; press `k` for a confirmation showing process name and PID.
+- Enter sends SIGTERM; Escape cancels. No automatic termination or SIGKILL escalation.
+- Start-time verification and Linux PID handles prevent signaling a reused PID.
+- Permission, exited-process and unavailable-kernel errors are shown in place.
+- `/` searches names, commands and PIDs. Escape cancels search or clears selection.
+- Selection and pending targets stay stable across refreshes; Sysmon and diagnostics remain available.
 
-Install or upgrade without compiling:
+Install or upgrade:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/AbhinavTheCoder-star/InstanceMonitor/main/install.sh | sh
-instmon --sysmon
+instmon
 ```
 
-Includes static Linux x86-64 and ARM64 binaries with SHA-256 checksums. The installer
-uses `/usr/local/bin` and sudo if needed; pass `sh -s -- --prefix "$HOME/.local"`
-for a user-only installation. Linux `/proc` and a terminal database are required;
-`systemctl` is optional. Sysmon is interactive only. See README for measurement
-scope and unavailable-data behavior.
+Static Linux x86-64 and ARM64 binaries and SHA-256 checksums are attached.
+Termination requires Linux 5.3+ and permitted pidfd syscalls; unsupported or blocked
+environments send no signal and retain monitoring. SIGTERM delivery does not
+guarantee exit. No new dependencies. See README for shortcuts and details.

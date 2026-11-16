@@ -24,16 +24,16 @@ int options_parse(int argc, char **argv, Options *o)
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
         if (!strcmp(arg, "--help")) {
-            puts("InstanceMonitor: read-only Linux process diagnostics\n"
+            puts("InstanceMonitor: Linux process diagnostics and management\n"
                  "Usage: instmon [list | inspect PID] [options]\n"
                  "  --sort ram|cpu|name|pid  --reverse  --filter TEXT\n"
                  "  --user NAME|UID  --json  --interval SECONDS (interactive)\n"
                  "  --sysmon (interactive)  --help  --version\n"
-                 "Keys: arrows/j/k select, Enter inspect, Tab panel, Esc back,\n"
+                 "Keys: arrows select, k request SIGTERM, Enter confirm/inspect, Esc cancel,\n"
                  "      / search, s Sysmon, m main, S sort, r reverse, ? help, q quit");
             return 1;
         }
-        if (!strcmp(arg, "--version")) { puts("instmon 0.2.0"); return 1; }
+        if (!strcmp(arg, "--version")) { puts("instmon 0.3.0"); return 1; }
         if (!strcmp(arg, "list") && !o->list && !o->inspect) { o->list = true; continue; }
         if (!strcmp(arg, "inspect") && !o->list && !o->inspect && i + 1 < argc) {
             unsigned long pid;
